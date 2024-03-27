@@ -1,7 +1,10 @@
 {
   "dev": {},
   "bsctest": {
-    "MyCar": "0xA2Ee607C4e5b016B4fdDb43Ed744C1f91F0a46B9"
+    "MyCar": "0x1f57fB85aC97E53E0a2BDc2b4C77d151802b1d9d"
   },
-  "main": {}
+  "main": {},
+  "sepolia": {
+    "MyCar": "0x6b23cc32337BDD580882d122b15713B6DaFdDE02"
+  }
 }

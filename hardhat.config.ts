@@ -16,7 +16,11 @@ const config: HardhatUserConfig = {
   },
   networks: {
     bsctest: {
-      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      url: "https://data-seed-prebsc-2-s1.binance.org:8545/",
+      accounts: [process.env.PRIVATE_KEY as string],
+    },
+    sepolia: {
+      url: `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`,
       accounts: [process.env.PRIVATE_KEY as string],
     },
   },
