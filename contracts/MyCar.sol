@@ -60,6 +60,7 @@ contract MyCar is Ownable, AccessControl {
 		_setupRole(MANAGER_ROLE, msg.sender);
 	}
 
+	// CREATE CONTRACT
 	function createContract(
 		uint contract_id,
 		string memory owner_email,
@@ -76,10 +77,10 @@ contract MyCar is Ownable, AccessControl {
 		uint end_date,
 		string memory car_model,
 		string memory car_plate
-	) public onlyManager {
+	) public onlyManager returns (uint, address, string memory, address, string memory) {
 		require(carContractList[contract_id].contract_id == 0, "Contract ID already exists");
 		require(start_date < end_date, "Start date must be less than end date");
-		require(start_date > (block.timestamp + 86400) * 1000, "Start date must be greater than current date");
+		require(start_date > (block.timestamp + 43200) * 1000, "Start date must be greater than 12 hours from now");
 		require(bytes(owner_email).length > 0, "Owner email must not be empty");
 		require(bytes(renter_email).length > 0, "Renter email must not be empty");
 		require(bytes(car_model).length > 0, "Car model must not be empty");
@@ -115,8 +116,10 @@ contract MyCar is Ownable, AccessControl {
 		carContractIds.push(contract_id);
 
 		emit CarContractCreated(contract_id, owner_address, owner_email, renter_address, renter_email);
+		return (contract_id, owner_address, owner_email, renter_address, renter_email);
 	}
 
+	// PAYMENT
 	function pay(
 		uint contract_id,
 		string memory email,
@@ -130,7 +133,12 @@ contract MyCar is Ownable, AccessControl {
 		return (contract_id, email, amount, msg.sender);
 	}
 
-	function refundOwnerReject(uint contract_id, address renter_address, uint amount) public onlyManager {
+	// REFUND WHEN OWNER REJECT
+	function refundOwnerReject(
+		uint contract_id,
+		address renter_address,
+		uint amount
+	) public onlyManager returns (uint, uint) {
 		require(contract_id > 0, "Contract ID must be greater than 0");
 		require(amount > 0, "Amount must be greater than 0");
 		require(amount <= address(this).balance, "Amount must be less than or equal to the contract balance");
@@ -138,9 +146,11 @@ contract MyCar is Ownable, AccessControl {
 		payable(renter_address).transfer(amount);
 
 		emit CarContractRefundedOwnerRejected(contract_id, amount);
+		return (contract_id, amount);
 	}
 
-	function refundOwnerCancel(uint contract_id) public onlyManager {
+	// REFUND WHEN OWNER CANCEL
+	function refundOwnerCancel(uint contract_id) public onlyManager returns (uint, uint) {
 		require(contract_id > 0, "Contract ID must be greater than 0");
 		require(carContractList[contract_id].contract_id > 0, "Contract does not exist");
 
@@ -155,9 +165,11 @@ contract MyCar is Ownable, AccessControl {
 		carContractList[contract_id].status = CarContractStatus.CANCELED;
 
 		emit CarContractRefundedOwnerCanceled(contract_id, totalRefund);
+		return (contract_id, totalRefund);
 	}
 
-	function refundRenterCancel(uint contract_id) public onlyManager {
+	// REFUND WHEN RENTER CANCEL
+	function refundRenterCancel(uint contract_id) public onlyManager returns (uint, uint, uint) {
 		require(contract_id > 0, "Contract ID must be greater than 0");
 		require(carContractList[contract_id].contract_id > 0, "Contract does not exist");
 
@@ -175,9 +187,11 @@ contract MyCar is Ownable, AccessControl {
 		carContractList[contract_id].status = CarContractStatus.CANCELED;
 
 		emit CarContractRefundedRenterCanceled(contract_id, renterRefund, ownerRefund);
+		return (contract_id, renterRefund, ownerRefund);
 	}
 
-	function refund(uint contract_id) public onlyManager {
+	// REFUND WHEN ADMIN REFUND
+	function refund(uint contract_id) public onlyManager returns (uint, uint, uint) {
 		require(contract_id > 0, "Contract ID must be greater than 0");
 		require(carContractList[contract_id].contract_id > 0, "Contract does not exist");
 
@@ -195,30 +209,37 @@ contract MyCar is Ownable, AccessControl {
 		carContractList[contract_id].status = CarContractStatus.CANCELED;
 
 		emit CarContractRefunded(contract_id, renterRefund, ownerRefund);
+		return (contract_id, renterRefund, ownerRefund);
 	}
 
-	function startContract(uint contract_id) public onlyManager {
+	// START CONTRACT
+	function startContract(uint contract_id) public onlyManager returns (uint) {
 		require(contract_id > 0, "Contract ID must be greater than 0");
 		require(carContractList[contract_id].contract_id > 0, "Contract does not exist");
 
 		CarContract memory carContract = carContractList[contract_id];
 		require(carContract.status == CarContractStatus.APPROVED, "Contract status must be approved");
+		require(carContract.start_date < block.timestamp * 1000, "Start date must be less than current date");
 		uint totalPrice = carContract.rental_price_per_day * carContract.num_of_days;
 
 		payable(carContract.owner_address).transfer((totalPrice * 1) / 4);
 		carContractList[contract_id].status = CarContractStatus.STARTED;
 
 		emit CarContractStarted(contract_id);
+		return contract_id;
 	}
 
+	// END CONTRACT
 	function endContract(
 		uint contract_id,
-		bool is_over_limit,
-		uint over_times,
+		uint over_limit_km,
+		uint over_time_hours,
 		bool is_cleaning_fee,
 		bool is_deodorization_fee
-	) public onlyManager {
+	) public onlyManager returns (uint) {
 		require(contract_id > 0, "Contract ID must be greater than 0");
+		require(over_limit_km >= 0, "Over limit km must be greater than or equal to 0");
+		require(over_time_hours >= 0, "Over time hours must be greater than or equal to 0");
 		require(carContractList[contract_id].contract_id > 0, "Contract does not exist");
 
 		CarContract memory carContract = carContractList[contract_id];
@@ -226,12 +247,12 @@ contract MyCar is Ownable, AccessControl {
 		uint totalPrice = carContract.rental_price_per_day * carContract.num_of_days;
 		uint surcharge;
 
-		if (is_over_limit) {
-			surcharge += carContract.over_limit_fee;
+		if (over_limit_km > 0) {
+			surcharge += carContract.over_limit_fee * over_limit_km;
 		}
 
-		if (over_times > 0) {
-			surcharge += carContract.over_time_fee * over_times;
+		if (over_time_hours > 0) {
+			surcharge += carContract.over_time_fee * over_time_hours;
 		}
 
 		if (is_cleaning_fee) {
@@ -247,6 +268,7 @@ contract MyCar is Ownable, AccessControl {
 		carContractList[contract_id].status = CarContractStatus.ENDED;
 
 		emit CarContractEnded(contract_id);
+		return contract_id;
 	}
 
 	function setRefundRate(uint rate) public onlyManager {
